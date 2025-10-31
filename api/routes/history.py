@@ -9,6 +9,7 @@ import logging
 import base64
 
 from services.dataset_storage import DatasetStorageService
+from services.recommendation_service import get_all_recommendations
 from config.settings import IMAGES_DIR, OVERLAYS_DIR, ANNOTATIONS_DIR
 from database.connection import get_db
 from sqlalchemy.orm import Session
@@ -241,7 +242,8 @@ async def get_analysis_result_json(analysis_id: str):
 
 @router.post("/save-from-frontend")
 async def save_analysis_from_frontend(
-    payload: Dict[str, Any] = Body(...)
+    payload: Dict[str, Any] = Body(...),
+    db: Session = Depends(get_db)
 ):
     """
     Save analysis result yang sudah di-download oleh frontend.
@@ -258,7 +260,7 @@ async def save_analysis_from_frontend(
     }
     
     Returns:
-    - Saved analysis info
+    - Saved analysis info + skin care recommendations
     """
     try:
         logger.info("=" * 80)
@@ -315,12 +317,41 @@ async def save_analysis_from_frontend(
         )
         
         logger.info(f"✅ Analysis saved successfully! ID: {dataset_info.get('id')}")
+        
+        # ==================== GET RECOMMENDATIONS ====================
+        recommendations = []
+        try:
+            logger.info("🔍 Generating ingredient & product recommendations...")
+            
+            # Extract score_info from result_data
+            score_info = result_data.get("score_info", {})
+            
+            if score_info:
+                logger.info(f"📊 Found {len(score_info)} conditions in score_info")
+                
+                # Generate recommendations for all conditions
+                recommendations = get_all_recommendations(db, score_info)
+                
+                logger.info(
+                    f"✅ Generated {len(recommendations)} recommendation sets"
+                )
+            else:
+                logger.warning("⚠️ No score_info found in result_data, skipping recommendations")
+        
+        except Exception as rec_error:
+            logger.error(f"❌ Error generating recommendations: {rec_error}", exc_info=True)
+            # Don't fail the entire request if recommendations fail
+            recommendations = []
+        
+        # ============================================================
+        
         logger.info("=" * 80)
         
         return {
             "status": "success",
             "message": "Analysis saved to database and dataset",
-            "data": dataset_info
+            "data": dataset_info,
+            "recommendations": recommendations  # 🆕 Added recommendations
         }
     
     except HTTPException:

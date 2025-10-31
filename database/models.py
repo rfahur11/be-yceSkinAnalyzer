@@ -1,8 +1,9 @@
 """
-Database models untuk skin analysis history dan dataset
+Database models untuk skin analysis history, dataset, dan recommendation system
 """
-from sqlalchemy import Column, String, JSON, DateTime, Text, Integer
+from sqlalchemy import Column, String, JSON, DateTime, Text, Integer, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid
 from database.connection import Base
@@ -102,3 +103,167 @@ class COCODatasetMetadata(Base):
     
     def __repr__(self):
         return f"<COCODatasetMetadata(version={self.dataset_version}, images={self.total_images})>"
+
+
+# ==================== RECOMMENDATION SYSTEM MODELS ====================
+
+class SeverityLevel(Base):
+    """
+    Model untuk severity levels (Poor, Fair, Good).
+    Mapping score range ke level kondisi kulit.
+    """
+    __tablename__ = "severity_levels"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(50), nullable=False, unique=True, comment="Poor, Fair, Good")
+    description = Column(Text, nullable=True)
+    min_score = Column(Integer, nullable=False, comment="Minimum score (inclusive)")
+    max_score = Column(Integer, nullable=False, comment="Maximum score (inclusive)")
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    condition_mappings = relationship("ConditionIngredient", back_populates="severity")
+    
+    def __repr__(self):
+        return f"<SeverityLevel(name={self.name}, range={self.min_score}-{self.max_score})>"
+    
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "min_score": self.min_score,
+            "max_score": self.max_score
+        }
+    
+    @classmethod
+    def get_severity_by_score(cls, db, score: int):
+        """Get severity level based on score"""
+        return db.query(cls).filter(
+            cls.min_score <= score,
+            cls.max_score >= score
+        ).first()
+
+
+class Condition(Base):
+    """
+    Model untuk kondisi kulit (acne, wrinkle, pore, etc).
+    """
+    __tablename__ = "conditions"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False, unique=True, index=True, comment="acne, wrinkle, pore, etc")
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    condition_mappings = relationship("ConditionIngredient", back_populates="condition")
+    
+    def __repr__(self):
+        return f"<Condition(name={self.name})>"
+    
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description
+        }
+
+
+class Ingredient(Base):
+    """
+    Model untuk bahan aktif (ingredients) untuk perawatan kulit.
+    """
+    __tablename__ = "ingredients"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(255), nullable=False, index=True, comment="Brand/commercial name")
+    generic_name = Column(String(255), nullable=True, index=True, comment="Generic/scientific name")
+    benefit = Column(Text, nullable=False, comment="Benefits description")
+    warnings = Column(Text, nullable=True, comment="Usage warnings or side effects")
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    condition_mappings = relationship("ConditionIngredient", back_populates="ingredient")
+    products = relationship("Product", back_populates="ingredient")
+    
+    def __repr__(self):
+        return f"<Ingredient(name={self.name}, generic={self.generic_name})>"
+    
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "generic_name": self.generic_name,
+            "benefit": self.benefit,
+            "warnings": self.warnings
+        }
+
+
+class ConditionIngredient(Base):
+    """
+    Model untuk mapping antara kondisi, severity, dan ingredient.
+    Menentukan ingredient apa yang direkomendasikan untuk kondisi tertentu dengan severity tertentu.
+    """
+    __tablename__ = "condition_ingredients"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    condition_id = Column(Integer, ForeignKey('conditions.id', ondelete='CASCADE'), nullable=False, index=True)
+    severity_id = Column(Integer, ForeignKey('severity_levels.id', ondelete='CASCADE'), nullable=False, index=True)
+    ingredient_id = Column(Integer, ForeignKey('ingredients.id', ondelete='CASCADE'), nullable=False, index=True)
+    suggested_use = Column(Text, nullable=True, comment="How to use this ingredient")
+    priority = Column(Integer, default=1, comment="1=highest priority")
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    condition = relationship("Condition", back_populates="condition_mappings")
+    severity = relationship("SeverityLevel", back_populates="condition_mappings")
+    ingredient = relationship("Ingredient", back_populates="condition_mappings")
+    
+    def __repr__(self):
+        return f"<ConditionIngredient(condition_id={self.condition_id}, severity_id={self.severity_id}, ingredient_id={self.ingredient_id})>"
+    
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "condition_id": self.condition_id,
+            "severity_id": self.severity_id,
+            "ingredient_id": self.ingredient_id,
+            "suggested_use": self.suggested_use,
+            "priority": self.priority
+        }
+
+
+class Product(Base):
+    """
+    Model untuk produk komersial yang mengandung ingredient.
+    """
+    __tablename__ = "products"
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(255), nullable=False, comment="Product name")
+    brand = Column(String(255), nullable=False, index=True, comment="Brand name")
+    ingredient_id = Column(Integer, ForeignKey('ingredients.id', ondelete='CASCADE'), nullable=False, index=True)
+    country = Column(String(100), nullable=True, index=True, comment="Country of origin")
+    url = Column(Text, nullable=True, comment="Product page URL")
+    image_url = Column(Text, nullable=True, comment="Product image URL")
+    price_range = Column(String(50), nullable=True, comment="Budget, Mid-range, Premium")
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    ingredient = relationship("Ingredient", back_populates="products")
+    
+    def __repr__(self):
+        return f"<Product(name={self.name}, brand={self.brand})>"
+    
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "brand": self.brand,
+            "ingredient_id": self.ingredient_id,
+            "country": self.country,
+            "url": self.url,
+            "image_url": self.image_url,
+            "price_range": self.price_range
+        }
