@@ -5,3 +5,12 @@ requests>=2.31.0
 python-multipart>=0.0.9
 python-dotenv>=1.0.0
 Pillow>=10.0.0
+# PostgreSQL
+psycopg2-binary>=2.9.9
+sqlalchemy>=2.0.23
+# Image processing untuk mask to polygon conversion
+opencv-python>=4.8.0
+numpy>=1.24.0
+scikit-image>=0.21.0
+# Async support
+aiofiles>=23.2.1

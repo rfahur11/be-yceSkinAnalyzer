@@ -15,6 +15,12 @@ from api.routes.v1 import analysis as analysis_v1
 from api.routes.v2 import upload as upload_v2
 from api.routes.v2 import analysis as analysis_v2
 
+# Import History & Dataset routes
+from api.routes import history, dataset
+
+# Import database
+from database.connection import init_db
+
 
 def create_app() -> FastAPI:
     """
@@ -39,6 +45,19 @@ def create_app() -> FastAPI:
         - API Key authentication
         - Presigned URL upload (lebih cepat)
         - Improved error handling
+        - Dataset storage dengan COCO annotations
+        - Analysis history tracking
+        
+        ## Features
+        
+        ### Separated Workflow (Better UX)
+        - Upload → Create Task → Poll Status → Download & Save
+        - Real-time progress updates
+        - Granular error handling
+        
+        ### History & Dataset
+        - `/api/v2/history` - Retrieve analysis history
+        - `/api/v2/dataset` - Download complete dataset untuk training
         """,
         version="2.0.0",
         docs_url="/docs",
@@ -51,6 +70,9 @@ def create_app() -> FastAPI:
     # Setup error handlers
     setup_error_handlers(app)
     
+    # Initialize database
+    init_db()
+    
     # Register common routes
     app.include_router(health.router)
     
@@ -62,6 +84,10 @@ def create_app() -> FastAPI:
     # Register V2 routes
     app.include_router(upload_v2.router)
     app.include_router(analysis_v2.router)
+    
+    # Register History & Dataset routes
+    app.include_router(history.router)
+    app.include_router(dataset.router)
     
     return app
 

@@ -7,6 +7,7 @@ from io import BytesIO
 from PIL import Image
 from fastapi import HTTPException
 from config.settings import UPLOAD_URL_V2, API_KEY_V2
+from fastapi import UploadFile
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -273,3 +274,59 @@ async def upload_to_presigned_url(
             status_code=500,
             detail=f"Unexpected error during upload: {str(e)}"
         )
+
+
+async def upload_file_v2(file: UploadFile) -> dict:
+    """
+    High-level helper untuk menerima `UploadFile` dari endpoint dan melakukan:
+    1. Request presigned upload URL (request_upload_url_v2)
+    2. Upload file ke presigned URL (upload_to_presigned_url)
+    3. Return dict minimal yang dibutuhkan oleh route (file_id, presigned_url)
+
+    Returns:
+        dict: {"file_id": ..., "presigned_url": ..., "image_url": ..., ...}
+    """
+    try:
+        # Read file content
+        file_content = await file.read()
+        file_name = getattr(file, "filename", "upload.jpg")
+        content_type = getattr(file, "content_type", "image/jpeg")
+        file_size = len(file_content)
+
+        logger.info(f"Preparing upload for file: {file_name} ({file_size} bytes)")
+
+        # Request presigned URL
+        upload_info = await request_upload_url_v2(
+            file_name=file_name,
+            content_type=content_type,
+            file_size=file_size
+        )
+
+        # Determine presigned URL key (support both upload_url and presigned_url)
+        presigned_url = upload_info.get("upload_url") or upload_info.get("presigned_url")
+        upload_headers = upload_info.get("upload_headers", {})
+
+        if not presigned_url:
+            logger.error(f"No presigned URL returned from upload request: {upload_info}")
+            raise HTTPException(status_code=500, detail="No presigned URL returned from provider")
+
+        # Upload file to presigned URL
+        uploaded = await upload_to_presigned_url(presigned_url, file_content, upload_headers)
+        if not uploaded:
+            raise HTTPException(status_code=500, detail="Failed to upload file to presigned URL")
+
+        # Build return structure - keep keys expected by callers
+        result = {
+            "file_id": upload_info.get("file_id"),
+            "presigned_url": presigned_url,
+            "upload_info": upload_info,
+            "image_url": upload_info.get("image_url") or presigned_url.split('?')[0]
+        }
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in upload_file_v2: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

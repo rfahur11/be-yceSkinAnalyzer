@@ -2,6 +2,7 @@
 Konfigurasi aplikasi dan Perfect Corp API
 """
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
 # Load environment variables dari .env file
@@ -56,3 +57,32 @@ MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", str(10 * 1024 * 1024)))  # Defaul
 # Server Configuration
 HOST = os.getenv("HOST")
 PORT = int(os.getenv("PORT"))
+
+# PostgreSQL Configuration
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://postgres:admin987@localhost:5432/skin_analysis"
+)
+
+# Dataset Storage Configuration
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATASET_DIR = Path(os.getenv("DATASET_DIR", str(BASE_DIR / "dataset")))
+IMAGES_DIR = DATASET_DIR / "images"
+MASKS_DIR = DATASET_DIR / "masks"
+ANNOTATIONS_DIR = DATASET_DIR / "annotations"
+OVERLAYS_DIR = DATASET_DIR / "overlays"
+
+# Create directories if not exist
+for directory in [IMAGES_DIR, MASKS_DIR, ANNOTATIONS_DIR, OVERLAYS_DIR]:
+    directory.mkdir(parents=True, exist_ok=True)
+
+# COCO Dataset Configuration
+COCO_CATEGORIES = [
+    {"id": 1, "name": "acne", "supercategory": "skin_issue"},
+    {"id": 2, "name": "wrinkle", "supercategory": "skin_issue"},
+    {"id": 3, "name": "pore", "supercategory": "skin_issue"},
+    {"id": 4, "name": "dark_spot", "supercategory": "skin_issue"},
+    {"id": 5, "name": "dark_circle", "supercategory": "skin_issue"},
+    {"id": 6, "name": "eye_bag", "supercategory": "skin_issue"},
+    {"id": 7, "name": "redness", "supercategory": "skin_issue"},
+]
