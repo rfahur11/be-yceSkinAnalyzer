@@ -18,6 +18,9 @@ from api.routes.v2 import analysis as analysis_v2
 # Import History & Dataset routes
 from api.routes import history, dataset
 
+# Import Admin routes
+from api.routes import admin
+
 # Import database
 from database.connection import init_db
 
@@ -88,6 +91,9 @@ def create_app() -> FastAPI:
     # Register History & Dataset routes
     app.include_router(history.router)
     app.include_router(dataset.router)
+    
+    # Register Admin routes
+    app.include_router(admin.router)
     
     return app
 
